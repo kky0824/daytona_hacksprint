@@ -29,7 +29,7 @@ JOB_DEFINITION = {
             "type": "container/run",
             "id": "llm",
             "args": {
-                "image": "docker.io/vllm/vllm-openai:v0.8.5",
+                "image": "docker.io/vllm/vllm-openai:v0.10.2",
                 "cmd": [
                     "--model", MODEL_ID,
                     "--served-model-name", SERVED_NAME,
