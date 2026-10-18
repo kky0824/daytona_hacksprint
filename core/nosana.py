@@ -81,8 +81,19 @@ def deploy(timeout_minutes=240):
     return dep
 
 
+def _deployment_id():
+    if STATE.exists():
+        return json.loads(STATE.read_text())["id"]
+    # No local state (e.g. a fresh clone): find this project's newest running deployment.
+    deps = _call("GET", "/deployments")["deployments"]
+    ours = [d for d in deps if d.get("name", "").startswith("hacksprint-") and d.get("status") == "RUNNING"]
+    if not ours:
+        raise RuntimeError("no running hacksprint deployment; run `python -m core.nosana deploy`")
+    return max(ours, key=lambda d: d["created_at"])["id"]
+
+
 def status():
-    dep_id = json.loads(STATE.read_text())["id"]
+    dep_id = _deployment_id()
     dep = _call("GET", f"/deployments/{dep_id}")
     endpoints = dep.get("endpoints") or []
     state = {"id": dep_id, "status": dep.get("status"), "endpoints": endpoints}
@@ -93,7 +104,7 @@ def status():
 
 
 def stop():
-    dep_id = json.loads(STATE.read_text())["id"]
+    dep_id = _deployment_id()
     return _call("POST", f"/deployments/{dep_id}/stop")
 
 
