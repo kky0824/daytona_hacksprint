@@ -37,6 +37,23 @@
 | 바탕화면에서 실행한 학생 | 다른 폴더에서 `python lab/lesson.py` | 상대 경로 (`data.csv`) |
 | 오늘 설치한 학생 | `pip install -U -r requirements.txt` (최신 버전) | pandas 3에서 **에러 없이 답이 바뀜** |
 
+### 수업 자료(PDF / PPTX)로 시작하기
+
+![수업 PDF 리허설 화면](docs/demo-slides.png)
+
+웹 화면에서 **수업 자료로 시작하기**에 PDF나 PPTX를 올리면:
+
+1. 슬라이드에서 학생이 터미널에 입력하는 명령과 작업 폴더를 찾아 `lesson.sh`로 만든다 (`{영상 파일 이름}` 같은 템플릿 줄은 건너뛰고 슬라이드의 구체적 예시를 사용).
+2. GUI로만 하는 단계(COLMAP, CloudCompare 화면 조작)는 슬라이드 범위와 함께 "자동 리허설 불가"로 따로 표시한다.
+3. 영상 실습용 학생 프로필로 리허설한다.
+
+| 프로필 | 재현 방법 | 실제 수업(3D 복원 실습)에서 잡은 문제 |
+|---|---|---|
+| 선생님 PC | ffmpeg 설치됨, 1080p 영상 `input.mp4` | 기준 결과 (jpg 100장, 1920x1080) |
+| ffmpeg 없는 학교 PC | ffmpeg 패키지 제거 | 슬라이드 괄호 속 설치 안내를 놓치면 `command not found` |
+| 4K로 촬영한 학생 | 4K 영상 | **에러 없이** 3840x2160 사진 100장 생성. 다음 단계 COLMAP dense stereo에서 GPU 메모리 초과 위험 |
+| 아이폰으로 찍은 학생 | 파일명 `IMG_0412.MOV` | 슬라이드의 `input.mp4`가 없어 실패 |
+
 ## 혁신 포인트 (Innovation)
 
 1. **PC 한 대가 아닌 반 전체**: 학생 프로필마다 독립된 Daytona 샌드박스(이미지, 패키지, 실행 위치가 다름)를 몇 초 만에 병렬로 실행
@@ -52,7 +69,8 @@
 
 | 파일 | 역할 |
 |---|---|
-| `dryrun/profiles.py` | 학생 프로필 정의 |
+| `dryrun/profiles.py` | 학생 프로필 정의 (Python 실습용, 영상·터미널 실습용) |
+| `dryrun/slides.py` | PDF/PPTX에서 학생 실행 단계(lesson.sh)와 GUI 단계 추출 |
 | `dryrun/runner.py` | 프로필별 Daytona 샌드박스 병렬 실행 |
 | `dryrun/fixer.py` | 판정(선생님 출력 기준), LLM 진단·수정, 규칙 기반 대체 |
 | `dryrun/engine.py` | 실행 → 판정 → 수정 → 재실행 루프, 리포트 |
@@ -61,6 +79,7 @@
 | `core/sandbox.py` | Daytona 클라이언트 |
 | `core/nosana.py`, `core/llm.py` | Nosana LLM 배포·호출 |
 | `examples/lesson1/` | 함정 3개를 심은 데모 실습 |
+| `examples/recon3d/` | 영상 실습용 샘플 영상 (1080p, 4K, 각 18초) |
 
 ## 실행 방법
 
@@ -105,6 +124,7 @@ uvicorn app.main:app --port 8000
 ```
 
 브라우저에서 http://localhost:8000 → **리허설 시작**. 데모 실습이 미리 채워져 있습니다.
+수업 자료로 하려면 **수업 자료로 시작하기**에서 PDF/PPTX를 고른 뒤 **리허설 시작**을 누르세요.
 
 ### 5-b. CLI로 실행
 

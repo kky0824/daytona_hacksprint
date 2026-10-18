@@ -117,3 +117,73 @@ def fix(files, results, verdicts, teacher, versions, profiles):
         out = rule_fix(files, results, verdicts, versions)
         out["llm_error"] = str(e)[:200]
         return out
+
+
+# --- Terminal labs (lesson.sh extracted from slides) ---
+
+def rule_fix_shell(files, results, verdicts, teacher):
+    script = files["lesson.sh"]
+    lines = script.splitlines()
+    after_cd = next((i + 1 for i, l in enumerate(lines) if l.startswith("cd ")), 1)
+    inserts, causes = [], {}
+    for pid, verdict in verdicts.items():
+        err = results[pid].stderr
+        if verdict == FAIL and (m := re.search(r"(\w[\w.-]*): command not found", err)):
+            tool = m.group(1)
+            causes[pid] = f"이 PC에는 {tool}이(가) 없어 명령이 실패했습니다. 슬라이드의 괄호 속 설치 안내를 학생이 놓친 경우입니다. 없으면 자동 설치하는 줄을 추가했습니다."
+            inserts.append(f"command -v {tool} >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq {tool})")
+        elif verdict == FAIL and "No such file" in err:
+            causes[pid] = "영상 파일 이름이 슬라이드의 input.mp4와 다릅니다 (예: 아이폰의 IMG_0412.MOV). 폴더 안의 영상을 확장자와 대소문자에 상관없이 찾도록 바꿨습니다."
+            inserts.append('VIDEO=$(ls *.mp4 *.MP4 *.mov *.MOV 2>/dev/null | head -1)')
+            lines = [re.sub(r"-i\s+(\"[^\"]*\"|\S+)", '-i "$VIDEO"', l) if l.lstrip().startswith("ffmpeg") else l for l in lines]
+        elif verdict in (WRONG, WARN):
+            size = re.search(r"(\d+)x(\d+)", teacher.stdout)
+            if size and "scale=" not in "\n".join(lines):
+                h = size.group(2)
+                causes[pid] = (f"에러는 없지만 사진 해상도가 선생님과 다릅니다 ({results[pid].stdout.strip().splitlines()[-1]}). "
+                               f"4K 사진은 다음 단계인 COLMAP dense stereo에서 GPU 메모리를 크게 늘려 튕길 수 있어, 세로 {h}px 이하로 줄이도록 했습니다.")
+                lines = [re.sub(r'-vf "([^"]+)"', rf'-vf "\1,scale=-2:\'min({h},ih)\'"', l) if l.startswith("ffmpeg") else l for l in lines]
+    for cmd in reversed(dict.fromkeys(inserts)):
+        lines.insert(after_cd, cmd)
+    return {"lesson.sh": "\n".join(lines) + "\n", "causes": causes, "by": "rules"}
+
+
+SHELL_PROMPT = """You are Dry Run. A teacher's terminal lab (extracted from class slides) is rehearsed on several student PCs.
+The teacher's PC is the reference. Fix lesson.sh so EVERY student PC produces the teacher's result.
+
+lesson.sh:
+```bash
+{script}
+```
+
+Teacher result summary:
+```
+{teacher_out}
+```
+
+Student PCs that did not match:
+{failures}
+
+Rules:
+- Make the minimal changes; keep `set -e` and the `cd` line.
+- If a tool is missing, install it only when missing: `command -v X >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq X)`.
+- If a student's input file has another name, find it in the folder instead of hard-coding the name. Student videos can be
+  .mp4 or .mov in any letter case (iPhone: IMG_0412.MOV), e.g. VIDEO=$(ls *.mp4 *.MP4 *.mov *.MOV 2>/dev/null | head -1).
+- If outputs differ from the teacher's (e.g. image resolution), make them match the teacher's (e.g. an ffmpeg scale filter).
+Reply with ONLY a JSON object:
+{{"causes": {{"<pc id>": "<one Korean sentence: root cause and the fix>"}}, "lesson.sh": "<full fixed script>"}}"""
+
+
+def llm_fix_shell(files, results, verdicts, teacher, profiles):
+    failures = "\n".join(
+        f"- id={pid} ({profiles[pid].description}) verdict={v} exit={results[pid].exit_code}\n"
+        f"  result summary: {results[pid].stdout.strip()!r}\n  stderr tail: {results[pid].stderr.strip()[-600:]!r}"
+        for pid, v in verdicts.items()
+    )
+    msg = SHELL_PROMPT.format(script=files["lesson.sh"], teacher_out=teacher.stdout.strip(), failures=failures)
+    raw = llm.chat([{"role": "user", "content": msg}], temperature=0.1, max_tokens=1500)
+    data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
+    if "lesson.sh" not in data:
+        raise ValueError("LLM reply is missing lesson.sh")
+    data["by"] = "llm"
+    return data

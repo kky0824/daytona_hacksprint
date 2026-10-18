@@ -1,12 +1,30 @@
 """Run a lab in one Daytona sandbox per student profile, in parallel."""
+import re
 import shlex
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 
 from daytona import CreateSandboxFromImageParams
 
 from core.sandbox import client
 from dryrun.profiles import Profile
+
+ROOT = Path(__file__).resolve().parent.parent
+
+# Summarize what a terminal lab produced, so student results can be compared with the teacher's.
+CHECK = r"""python3 - <<'PY'
+import collections, glob, os
+from PIL import Image
+inputs = set(os.environ.get("DRYRUN_INPUTS", "").split(","))
+made = sorted(f for f in os.listdir(".") if os.path.isfile(f) and f not in inputs and not f.startswith("."))
+by_ext = collections.Counter(os.path.splitext(f)[1].lstrip(".").lower() for f in made)
+print(", ".join(f"{e} {n}개" for e, n in sorted(by_ext.items())) or "생성된 파일 없음")
+imgs = [f for f in made if f.lower().endswith((".jpg", ".jpeg", ".png"))]
+if imgs:
+    w, h = Image.open(imgs[0]).size
+    print(f"이미지 해상도 {w}x{h}")
+PY"""
 
 LAB_DIR = "lab"
 ENTRYPOINT = "lesson.py"
@@ -27,6 +45,27 @@ def _sh(sb, cmd, cwd=None, timeout=300):
     return r.exit_code, r.result
 
 
+def _run_shell_lab(sb, profile, files, status):
+    """Run lesson.sh (commands extracted from slides) the way the student would, in their work folder."""
+    home = sb.get_user_home_dir()
+    script = files["lesson.sh"]
+    m = re.search(r"^cd\s+(\S+)", script, re.M)
+    workdir = (m.group(1) if m else "~/lab").replace("~", home, 1)
+    _sh(sb, f"mkdir -p {shlex.quote(workdir)} /tmp/dryrun")
+    sb.fs.upload_file(script.encode(), "/tmp/dryrun/lesson.sh")
+    for name, sample in profile.inputs.items():
+        sb.fs.upload_file((ROOT / sample).read_bytes(), f"{workdir}/{name}")
+    status(profile.id, "installing")
+    for cmd in profile.setup:
+        _sh(sb, cmd, cwd=home)
+    status(profile.id, "running")
+    _sh(sb, "bash /tmp/dryrun/lesson.sh > /tmp/out.txt 2> /tmp/err.txt; echo $? > /tmp/code.txt", cwd=home, timeout=600)
+    code = int(_sh(sb, "cat /tmp/code.txt")[1].strip() or 1)
+    err = _sh(sb, "tail -c 4000 /tmp/err.txt")[1]
+    summary = _sh(sb, f"DRYRUN_INPUTS={shlex.quote(','.join(profile.inputs))} bash -c {shlex.quote(CHECK)}", cwd=workdir)[1]
+    return code, summary, err
+
+
 def run_profile(profile: Profile, files: dict[str, str], on_status=None) -> RunResult:
     import time
 
@@ -36,6 +75,9 @@ def run_profile(profile: Profile, files: dict[str, str], on_status=None) -> RunR
     status(profile.id, "starting")
     sb = client().create(params, timeout=180)
     try:
+        if "lesson.sh" in files:
+            code, out, err = _run_shell_lab(sb, profile, files, status)
+            return RunResult(profile.id, code, out, err, time.time() - t)
         home = sb.get_user_home_dir()
         lab = f"{home}/{LAB_DIR}"
         _sh(sb, f"mkdir -p {lab}")

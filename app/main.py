@@ -5,12 +5,13 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from dryrun.engine import rehearse
 from dryrun.profiles import PROFILES
+from dryrun.slides import extract_text, lesson_script, to_lab
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE = ROOT / "examples" / "lesson1"
@@ -35,10 +36,20 @@ def example():
     }
 
 
+@app.post("/api/slides")
+async def slides(file: UploadFile = File(...)):
+    """Class slides (PDF / PPTX) -> the terminal steps a student would run, as lesson.sh."""
+    pages = extract_text(file.filename or "", await file.read())
+    lab = to_lab(pages)
+    if not lab.get("script"):
+        raise HTTPException(422, "슬라이드에서 실행할 명령을 찾지 못했습니다.")
+    return {"pages": len(pages), "lab": lab, "files": {"lesson.sh": lesson_script(lab)}}
+
+
 @app.post("/api/rehearse")
 def start(lab: Lab):
-    if "lesson.py" not in lab.files:
-        raise HTTPException(400, "lesson.py is required")
+    if "lesson.py" not in lab.files and "lesson.sh" not in lab.files:
+        raise HTTPException(400, "lesson.py or lesson.sh is required")
     job_id = uuid.uuid4().hex[:8]
     job = jobs[job_id] = {"events": [], "state": None}
 
