@@ -16,8 +16,8 @@ import requests
 API = "https://dashboard.k8s.prd.nos.ci/api"
 STATE = Path(__file__).resolve().parent.parent / "nosana_deployment.json"
 
-MODEL_ID = os.environ.get("NOSANA_MODEL_ID", "Qwen/Qwen2.5-7B-Instruct")
-SERVED_NAME = os.environ.get("LLM_MODEL", "qwen2.5-7b")
+MODEL_ID = os.environ.get("NOSANA_MODEL_ID", "Qwen/Qwen3-14B-AWQ")
+SERVED_NAME = os.environ.get("LLM_MODEL", "qwen3-14b")
 MARKET = os.environ.get("NOSANA_MARKET", "97G9NnvBDQ2WpKu6fasoMsAKmfj63C9rhysJnkeWodAf")  # NVIDIA 4090 (premium)
 
 JOB_DEFINITION = {
@@ -34,7 +34,7 @@ JOB_DEFINITION = {
                     "--model", MODEL_ID,
                     "--served-model-name", SERVED_NAME,
                     "--port", "8000",
-                    "--max-model-len", "16384",
+                    "--max-model-len", "32768",
                     "--gpu-memory-utilization", "0.9",
                 ],
                 "gpu": True,

@@ -6,7 +6,7 @@ Daytona HackSprint Seoul (2026-10-18) 프로젝트.
 
 ## 아키텍처
 
-- **Nosana**: GPU 마켓(RTX 4090)에 vLLM으로 오픈소스 LLM(Qwen2.5-7B-Instruct)을 띄워 OpenAI 호환 API로 사용
+- **Nosana**: GPU 마켓(RTX 4090)에 vLLM으로 오픈소스 LLM(Qwen3-14B-AWQ)을 띄워 OpenAI 호환 API로 사용
 - **Daytona**: LLM이 생성한 코드를 격리된 샌드박스에서 실행
 
 ## 구조
