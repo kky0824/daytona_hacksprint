@@ -1,32 +1,30 @@
-# Dry Run — 수업 전 실습 리허설
+# Dry Run — Lab Material Rehearsal
 
-> **Rehearse your coding lab on every student’s machine — before class.**
+> **실습 자료, 학생 PC에서 먼저.** Rehearse your lab material on every student’s machine — before class.
 > Daytona HackSprint Seoul (2026-10-18)
 
-선생님 PC에선 잘 되던 실습이 수업 시간에 학생 PC 절반에서 튕긴다. Dry Run은 수업 전에 **서로 다른 학생 PC 여러 대를 Daytona 샌드박스로 동시에 띄워** 실습을 학생처럼 돌려보고, 크래시뿐 아니라 **에러 없이 답만 틀리는 경우**까지 잡아낸다. 그다음 **Nosana GPU에서 돌아가는 오픈소스 LLM**이 원인을 진단해 고치고, 모든 PC가 통과할 때까지 다시 돌려 **검증된 실습 키트**(고친 코드, 버전 고정 requirements, 리포트)를 돌려준다.
+Dry Run은 수업·실습 자료를 수업 전에 **여러 학생 PC 환경(Daytona 샌드박스)에서 동시에 리허설**하고, 크래시뿐 아니라 **에러 없이 결과만 다른 경우**까지 잡아낸다. **Nosana GPU에서 돌아가는 오픈소스 LLM**이 원인을 진단해 고치고, 모든 PC가 통과할 때까지 다시 돌려 **검증된 실습 키트**를 돌려준다.
 
 ![Dry Run 데모 화면](docs/demo.png)
 
+## In the News
+
+- **heise online (2026.01)** — [“Pandas 3.0 brings unified string type and performance optimization”](https://www.heise.de/en/news/Pandas-3-0-brings-unified-string-type-and-performance-optimization-11154474.html): 기존 코드 동작 변경
+- **pandas.pydata.org (2026.01.21)** — [“pandas 3.0 released!”](https://pandas.pydata.org/community/blog/pandas-3.0.html): 공식 breaking change
+- **The Carpentries blog** — [“Keeping track of problems”](https://carpentries.org/blog/2014/02/keeping-track-of-problems/): 설치 = 학습자 최대 난관
+- **Garden Developer Productivity Survey (2021)** — [리포트](https://resources.garden.io/hubfs/Garden_Developer_Productivity_Survey_Report_2021.pdf): 개발자가 주 15시간 이상을 환경 설정 등 코드 외 작업에 사용 (벤더 설문)
+
 ## 문제 (Problem)
 
-- **실제 경험**: 고등학생 대상 3D 복원 실습(COLMAP)에서 모든 PC에 같은 설치 스크립트를 돌렸지만, 수업 중 약 절반의 PC가 튕겼다. 강사는 자기 PC, 자기 데이터로만 테스트했다.
-- **업계 공통 문제**: Software Carpentry는 설치·설정을 워크숍 학습자의 가장 큰 난관으로 꼽는다(특히 Windows). 반대로 케임브리지 부트캠프는 실습실 PC를 미리 준비해 첫날 오전의 설치 시간 대부분을 없앴다. **미리 점검하면 해결된다.**
-- **지금 더 심해지는 이유**: pandas 3.0(2026년 1월)이 Copy-on-Write를 유일한 동작 방식으로 바꾸면서(공식 breaking change), 기존 강의 코드가 **에러 없이 다른 답**을 내기 시작했다.
-
-직접 측정한 결과 (같은 코드, Daytona 샌드박스 두 곳):
-
-| 환경 | `df["score"][0] = 100` 후 평균 | 종료 코드 |
-|---|---|---|
-| 선생님 PC (pandas 2.3.3) | **50.0** | 0 |
-| 오늘 설치한 학생 (pandas 3.0.6) | **20.0** | 0 (경고 한 줄뿐) |
+1. **선생님 PC에선 되는데, 학생 PC에선 안 된다.** 실습 자료는 늘 선생님 PC 한 대에서만 테스트된다. 학생 PC는 프로그램이 **설치 안 돼 있거나**, **버전이 다르거나**, 가져온 **파일이 다르다.** (예: 고교 3D 복원 실습에서 같은 설치 스크립트를 썼지만 수업 중 학생 PC가 줄줄이 멈췄다.)
+2. **더 무서운 건, 에러 없이 결과만 다른 것.** 같은 코드가 학생 PC에서 에러 없이 끝나지만 결과는 선생님과 다르다. 에러가 없으니 선생님도 학생도 모른 채 수업이 진행된다.
 
 ## 해결책 (Solution)
 
-1. **업로드**: 실습 코드, requirements.txt, 데이터
-2. **학생 PC 생성 (Daytona)**: 선생님 PC + 학생 PC 3대를 병렬로 띄움
-3. **결과 비교**: 선생님 출력이 기준. 실패 / 답이 다름 / 새 경고로 판정
-4. **진단·수정 (Nosana)**: Nosana GPU 위 vLLM으로 띄운 Qwen3-14B가 원인을 한국어로 설명하고 코드와 requirements를 고침 (LLM이 실패하면 규칙 기반으로 대체)
-5. **재실행 → 검증 키트**: 모든 PC가 통과할 때까지 반복, 키트를 zip으로 다운로드
+1. **Upload**: 실습 자료 (PDF / PPTX, 또는 코드·requirements·데이터)
+2. **Rehearse (Daytona)**: 선생님 PC + 학생 PC 3대를 병렬로 띄워 실행하고, 선생님 결과를 기준으로 실패 / 결과 다름 / 새 경고를 판정
+3. **Fix (Nosana)**: Nosana GPU 위 vLLM으로 띄운 Qwen3-14B가 원인을 한국어로 설명하고 자료를 고침 (LLM이 실패하면 규칙 기반으로 대체)
+4. **Verified Kit**: 모든 PC가 통과할 때까지 다시 돌리고, 검증된 키트를 zip으로 다운로드
 
 ### 학생 프로필
 
@@ -88,7 +86,6 @@
 ```bash
 git clone https://github.com/kky0824/daytona_hacksprint.git
 cd daytona_hacksprint
-git checkout claude/hopeful-wright-jh5cap
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
