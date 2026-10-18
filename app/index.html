@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dry Run</title>
+<style>
+  :root { --ink:#121826; --paper:#F6F4EE; --card:#ffffff; --muted:#5b6475; --line:#e2ded3;
+          --pass:#2F5FD0; --fail:#C2410C; --wrong:#B45309; --warn:#A16207; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  header { background:var(--ink); color:var(--paper); padding:20px 32px; display:flex; align-items:baseline; gap:16px; }
+  header h1 { margin:0; font-size:28px; }
+  header p { margin:0; color:#C9D1DC; }
+  main { max-width:1280px; margin:0 auto; padding:24px 32px 64px; }
+  .editors { display:grid; grid-template-columns: 2fr 1fr; gap:16px; }
+  label { font-weight:600; font-size:14px; color:var(--muted); display:block; margin-bottom:6px; }
+  textarea { width:100%; font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; border:1px solid var(--line); border-radius:10px; padding:12px; background:var(--card); color:var(--ink); }
+  button { background:var(--ink); color:var(--paper); border:0; border-radius:10px; padding:12px 22px; font-size:16px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .bar { display:flex; gap:12px; align-items:center; margin:16px 0 24px; }
+  #phase { color:var(--muted); }
+  .round-title { font-weight:700; margin:24px 0 10px; }
+  .grid { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; }
+  .card { background:var(--card); border:2px solid var(--line); border-radius:14px; padding:14px; min-height:150px; }
+  .card h3 { margin:0 0 4px; font-size:16px; }
+  .card .desc { font-size:12px; color:var(--muted); margin-bottom:10px; }
+  .badge { display:inline-block; font-weight:700; font-size:13px; padding:3px 10px; border-radius:999px; background:#eceae4; }
+  .card.pass { border-color:var(--pass); } .card.pass .badge { background:var(--pass); color:#fff; }
+  .card.fail { border-color:var(--fail); } .card.fail .badge { background:var(--fail); color:#fff; }
+  .card.wrong { border-color:var(--wrong); border-style:dashed; } .card.wrong .badge { background:var(--wrong); color:#fff; }
+  .card.warn { border-color:var(--warn); } .card.warn .badge { background:var(--warn); color:#fff; }
+  .card.teacher { background:#EEF2FB; }
+  .card.error { border-color:#9aa1ad; border-style:dotted; } .card.error .badge { background:#6b7280; color:#fff; }
+  .out { font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; white-space:pre-wrap; word-break:break-word; margin-top:8px; color:#3e4757; max-height:110px; overflow:auto; }
+  .fix { background:var(--ink); color:var(--paper); border-radius:14px; padding:18px 20px; margin-top:16px; }
+  .fix h3 { margin:0 0 10px; }
+  .fix li { margin:6px 0; }
+  .fix pre { background:#0B101B; color:#C9D1DC; border-radius:10px; padding:12px; overflow:auto; font-size:13px; }
+  .fix .cols { display:grid; grid-template-columns: 2fr 1fr; gap:12px; }
+  .done { background:#DCE6FB; border-radius:14px; padding:18px 20px; margin-top:16px; font-weight:600; }
+  a.kit { margin-left:12px; }
+  .upload { background:var(--card); border:1px dashed #b9b4a6; border-radius:14px; padding:14px 16px; margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .upload label { margin:0; }
+  .steps { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 18px; margin-bottom:16px; }
+  .steps h3 { margin:0 0 8px; font-size:16px; }
+  .steps code { background:#eef0f4; padding:2px 6px; border-radius:6px; }
+  .steps .manual { color:var(--muted); }
+</style>
+</head>
+<body>
+<header><h1>Dry Run</h1><p>수업 전 실습 리허설 · Rehearse your lab on every student’s machine</p></header>
+<main>
+  <div class="upload">
+    <label>수업 자료로 시작하기 (PDF / PPTX)</label>
+    <input type="file" id="deck" accept=".pdf,.pptx">
+    <span id="deckinfo"></span>
+  </div>
+  <div id="extracted"></div>
+  <div class="editors" id="editors">
+    <div><label id="codelabel">lesson.py (실습 코드)</label><textarea id="code" rows="11"></textarea></div>
+    <div id="pyside"><label>requirements.txt</label><textarea id="reqs" rows="4"></textarea>
+         <label style="margin-top:10px">data.csv</label><textarea id="data" rows="4"></textarea></div>
+  </div>
+  <div class="bar"><button id="go">리허설 시작</button><span id="phase"></span></div>
+  <div id="rounds"></div>
+</main>
+<script>
+const LABEL = {pass:"PASS · 통과", fail:"FAIL · 실패", wrong:"WRONG · 답이 다름", warn:"WARN · 경고", error:"ERROR · 인프라 오류"};
+const STATUS = {starting:"PC 준비 중…", installing:"패키지 설치 중…", running:"실습 실행 중…", retrying:"PC 다시 준비 중…", error:"PC 준비 실패"};
+let profiles = [], extra = {}, mode = "python";
+
+const esc = s => (s || "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const lastLines = (s, n) => (s || "").trim().split("\n").slice(-n).join("\n");
+
+fetch("/api/example").then(r => r.json()).then(d => {
+  profiles = d.profiles;
+  code.value = d.files["lesson.py"]; reqs.value = d.files["requirements.txt"]; data.value = d.files["data.csv"] || "";
+  for (const [k, v] of Object.entries(d.files)) if (!["lesson.py","requirements.txt","data.csv"].includes(k)) extra[k] = v;
+});
+
+deck.onchange = async () => {
+  const f = deck.files[0]; if (!f) return;
+  deckinfo.textContent = "슬라이드 읽는 중…";
+  const body = new FormData(); body.append("file", f);
+  const r = await fetch("/api/slides", {method:"POST", body});
+  if (!r.ok) { deckinfo.textContent = "실행할 명령을 찾지 못했습니다."; return; }
+  const d = await r.json();
+  mode = "shell"; extra = {};
+  deckinfo.textContent = `${f.name} · ${d.pages}장에서 실습 단계를 찾았습니다`;
+  code.value = d.files["lesson.sh"];
+  codelabel.textContent = "lesson.sh (슬라이드에서 뽑은 학생 실행 단계)";
+  pyside.style.display = "none";
+  extracted.innerHTML = `<div class="steps"><h3>슬라이드에서 찾은 실습 단계</h3>
+    <div>작업 폴더: <code>${esc(d.lab.workdir)}</code></div>
+    <ul>${d.lab.script.map(c => `<li>터미널: <code>${esc(c)}</code></li>`).join("")}
+    ${d.lab.manual_steps.map(m => `<li class="manual">${esc(m)}</li>`).join("")}</ul></div>`;
+};
+
+function roundBox(n) {
+  const box = document.createElement("div");
+  box.innerHTML = `<div class="round-title">리허설 ${n}회차 · 선생님 PC + 학생 PC ${profiles.length - 1}대 동시 실행 (Daytona)</div>
+    <div class="grid">${profiles.map(p => `<div class="card ${p.id === "teacher" ? "teacher" : ""}" id="c${n}-${p.id}">
+      <h3>${p.name}</h3><div class="desc">${esc(p.description)}</div><span class="badge">대기</span><div class="out"></div></div>`).join("")}</div>`;
+  rounds.appendChild(box);
+  return box;
+}
+
+function handle(e) {
+  if (e.type === "profiles") profiles = e.profiles;
+  if (e.type === "round") { roundBox(e.round); phase.textContent = `${e.round}회차 실행 중…`; }
+  if (e.type === "status") {
+    const c = document.getElementById(`c${e.round}-${e.profile}`);
+    if (c) c.querySelector(".badge").textContent = STATUS[e.status] || e.status;
+  }
+  if (e.type === "results") {
+    for (const p of profiles) {
+      const c = document.getElementById(`c${e.round}-${p.id}`), r = e.results[p.id];
+      const v = p.id === "teacher" ? (r.exit_code === 0 ? "pass" : "fail") : e.verdicts[p.id];
+      c.classList.add(v);
+      c.querySelector(".badge").textContent = p.id === "teacher" ? "기준 (Reference)" : LABEL[v];
+      const detail = v === "pass" || v === "wrong" ? `결과: ${r.stdout.trim()}` + (v === "wrong" ? `\n(선생님: ${e.results.teacher.stdout.trim()})` : "")
+                                                    : lastLines(r.stderr || r.error, 2);
+      c.querySelector(".out").textContent = detail;
+    }
+  }
+  if (e.type === "fixing") phase.textContent = "Nosana GPU의 오픈소스 LLM이 원인을 진단하고 고치는 중…";
+  if (e.type === "fix") {
+    const box = document.createElement("div"); box.className = "fix";
+    const who = e.by === "llm" ? "Nosana GPU · Qwen3-14B 진단" : "규칙 기반 진단";
+    box.innerHTML = `<h3>${who}</h3><ul>${Object.entries(e.causes).map(([pid, c]) =>
+      `<li><b>${esc((profiles.find(p => p.id === pid) || {}).name || pid)}</b>: ${esc(c)}</li>`).join("")}</ul>
+      <div class="cols">${Object.values(e.files).map(v => `<pre>${esc(v)}</pre>`).join("")}</div>`;
+    rounds.appendChild(box);
+  }
+  if (e.type === "done") {
+    const box = document.createElement("div"); box.className = "done";
+    box.innerHTML = (e.done ? "✅ 모든 학생 PC 통과 · 검증된 실습 키트가 준비됐습니다" : "⚠️ 아직 실패한 학생 PC가 있습니다") +
+      ` (${e.seconds}초) <a class="kit" href="/api/jobs/${job}/kit.zip">키트 다운로드 (zip)</a>`;
+    rounds.appendChild(box); phase.textContent = ""; go.disabled = false;
+  }
+  if (e.type === "error") { phase.textContent = "오류: " + e.message; go.disabled = false; }
+}
+
+let job = null;
+go.onclick = async () => {
+  go.disabled = true; rounds.innerHTML = "";
+  let files;
+  if (mode === "shell") files = {"lesson.sh": code.value};
+  else {
+    files = {"lesson.py": code.value, "requirements.txt": reqs.value, ...extra};
+    if (data.value.trim()) files["data.csv"] = data.value;
+  }
+  job = (await (await fetch("/api/rehearse", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({files})})).json()).job;
+  let since = 0;
+  const poll = async () => {
+    const d = await (await fetch(`/api/jobs/${job}?since=${since}`)).json();
+    since = d.next; d.events.forEach(handle);
+    if (!d.events.some(e => e.type === "done" || e.type === "error")) setTimeout(poll, 800);
+  };
+  poll();
+};
+</script>
+</body>
+</html>

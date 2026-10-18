@@ -1,0 +1,8 @@
+daytona==0.225.0
+openai>=1.40
+fastapi
+uvicorn
+python-multipart
+requests
+pypdf
+python-pptx
